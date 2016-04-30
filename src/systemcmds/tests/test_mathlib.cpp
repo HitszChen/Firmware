@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2015 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,6 +37,7 @@
  * Mathlib test
  */
 
+#include <px4_log.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,14 +49,14 @@
 
 #include "tests.h"
 
-#define TEST_OP(_title, _op) { unsigned int n = 60000; hrt_abstime t0, t1; t0 = hrt_absolute_time(); for (unsigned int j = 0; j < n; j++) { _op; }; t1 = hrt_absolute_time(); warnx(_title ": %.6fus", (double)(t1 - t0) / n); }
+#define TEST_OP(_title, _op) { unsigned int n = 30000; hrt_abstime t0, t1; t0 = hrt_absolute_time(); for (unsigned int j = 0; j < n; j++) { _op; }; t1 = hrt_absolute_time(); PX4_INFO(_title ": %.6fus", (double)(t1 - t0) / n); }
 
 using namespace math;
 
 int test_mathlib(int argc, char *argv[])
 {
 	int rc = 0;
-	warnx("testing mathlib");
+	PX4_INFO("testing mathlib");
 
 	{
 		Vector<2> v;
@@ -99,7 +100,7 @@ int test_mathlib(int argc, char *argv[])
 		TEST_OP("Vector<3> length squared", v1.length_squared());
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
-		// Need pragma here intead of moving variable out of TEST_OP and just reference because
+		// Need pragma here instead of moving variable out of TEST_OP and just reference because
 		// TEST_OP measures performance of vector operations.
 		TEST_OP("Vector<3> element read", volatile float a = v1(0));
 		TEST_OP("Vector<3> element read direct", volatile float a = v1.data[0]);
@@ -158,18 +159,19 @@ int test_mathlib(int argc, char *argv[])
 	}
 
 	{
+		PX4_INFO("Nonsymmetric matrix operations test");
 		// test nonsymmetric +, -, +=, -=
 
-		float data1[2][3] = {{1,2,3},{4,5,6}};
-		float data2[2][3] = {{2,4,6},{8,10,12}};
-		float data3[2][3] = {{3,6,9},{12,15,18}};
-		
+		float data1[2][3] = {{1, 2, 3}, {4, 5, 6}};
+		float data2[2][3] = {{2, 4, 6}, {8, 10, 12}};
+		float data3[2][3] = {{3, 6, 9}, {12, 15, 18}};
+
 		Matrix<2, 3> m1(data1);
 		Matrix<2, 3> m2(data2);
 		Matrix<2, 3> m3(data3);
 
 		if (m1 + m2 != m3) {
-			warnx("Matrix<2, 3> + Matrix<2, 3> failed!");
+			PX4_ERR("Matrix<2, 3> + Matrix<2, 3> failed!");
 			(m1 + m2).print();
 			printf("!=\n");
 			m3.print();
@@ -177,7 +179,7 @@ int test_mathlib(int argc, char *argv[])
 		}
 
 		if (m3 - m2 != m1) {
-			warnx("Matrix<2, 3> - Matrix<2, 3> failed!");
+			PX4_ERR("Matrix<2, 3> - Matrix<2, 3> failed!");
 			(m3 - m2).print();
 			printf("!=\n");
 			m1.print();
@@ -185,8 +187,9 @@ int test_mathlib(int argc, char *argv[])
 		}
 
 		m1 += m2;
+
 		if (m1 != m3) {
-			warnx("Matrix<2, 3> += Matrix<2, 3> failed!");
+			PX4_ERR("Matrix<2, 3> += Matrix<2, 3> failed!");
 			m1.print();
 			printf("!=\n");
 			m3.print();
@@ -195,15 +198,166 @@ int test_mathlib(int argc, char *argv[])
 
 		m1 -= m2;
 		Matrix<2, 3> m1_orig(data1);
+
 		if (m1 != m1_orig) {
-			warnx("Matrix<2, 3> -= Matrix<2, 3> failed!");
+			PX4_ERR("Matrix<2, 3> -= Matrix<2, 3> failed!");
 			m1.print();
 			printf("!=\n");
 			m1_orig.print();
 			rc = 1;
 		}
-	
+
 	}
 
+	{
+		// test conversion rotation matrix to quaternion and back
+		math::Matrix<3, 3> R_orig;
+		math::Matrix<3, 3> R;
+		math::Quaternion q;
+		float diff = 0.1f;
+		float tol = 0.00001f;
+
+		PX4_INFO("Quaternion transformation methods test.");
+
+		for (float roll = -M_PI_F; roll <= M_PI_F; roll += diff) {
+			for (float pitch = -M_PI_2_F; pitch <= M_PI_2_F; pitch += diff) {
+				for (float yaw = -M_PI_F; yaw <= M_PI_F; yaw += diff) {
+					R_orig.from_euler(roll, pitch, yaw);
+					q.from_dcm(R_orig);
+					R = q.to_dcm();
+
+					for (int i = 0; i < 3; i++) {
+						for (int j = 0; j < 3; j++) {
+							if (fabsf(R_orig.data[i][j] - R.data[i][j]) > 0.00001f) {
+								PX4_WARN("Quaternion method 'from_dcm' or 'to_dcm' outside tolerance!");
+								rc = 1;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// test against some known values
+		tol = 0.0001f;
+		math::Quaternion q_true = {1.0f, 0.0f, 0.0f, 0.0f};
+		R_orig.identity();
+		q.from_dcm(R_orig);
+
+		for (unsigned i = 0; i < 4; i++) {
+			if (fabsf(q.data[i] - q_true.data[i]) > tol) {
+				PX4_WARN("Quaternion method 'from_dcm()' outside tolerance!");
+				rc = 1;
+			}
+		}
+
+		q_true.from_euler(0.3f, 0.2f, 0.1f);
+		q = {0.9833f, 0.1436f, 0.1060f, 0.0343f};
+
+		for (unsigned i = 0; i < 4; i++) {
+			if (fabsf(q.data[i] - q_true.data[i]) > tol) {
+				PX4_WARN("Quaternion method 'from_euler()' outside tolerance!");
+				rc = 1;
+			}
+		}
+
+		q_true.from_euler(-1.5f, -0.2f, 0.5f);
+		q = {0.7222f, -0.6391f, -0.2386f, 0.1142f};
+
+		for (unsigned i = 0; i < 4; i++) {
+			if (fabsf(q.data[i] - q_true.data[i]) > tol) {
+				PX4_WARN("Quaternion method 'from_euler()' outside tolerance!");
+				rc = 1;
+			}
+		}
+
+		q_true.from_euler(M_PI_2_F, -M_PI_2_F, -M_PI_F / 3);
+		q = {0.6830f, 0.1830f, -0.6830f, 0.1830f};
+
+		for (unsigned i = 0; i < 4; i++) {
+			if (fabsf(q.data[i] - q_true.data[i]) > tol) {
+				PX4_WARN("Quaternion method 'from_euler()' outside tolerance!");
+				rc = 1;
+			}
+		}
+
+	}
+
+	{
+		// test quaternion method "rotate" (rotate vector by quaternion)
+		Vector<3> vector = {1.0f, 1.0f, 1.0f};
+		Vector<3> vector_q;
+		Vector<3> vector_r;
+		Quaternion q;
+		Matrix<3, 3> R;
+		float diff = 0.1f;
+		float tol = 0.00001f;
+
+		PX4_INFO("Quaternion vector rotation method test.");
+
+		for (float roll = -M_PI_F; roll <= M_PI_F; roll += diff) {
+			for (float pitch = -M_PI_2_F; pitch <= M_PI_2_F; pitch += diff) {
+				for (float yaw = -M_PI_F; yaw <= M_PI_F; yaw += diff) {
+					R.from_euler(roll, pitch, yaw);
+					q.from_euler(roll, pitch, yaw);
+					vector_r = R * vector;
+					vector_q = q.conjugate(vector);
+
+					for (int i = 0; i < 3; i++) {
+						if (fabsf(vector_r(i) - vector_q(i)) > tol) {
+							PX4_WARN("Quaternion method 'rotate' outside tolerance");
+							rc = 1;
+						}
+					}
+				}
+			}
+		}
+
+		// test some values calculated with matlab
+		tol = 0.0001f;
+		q.from_euler(M_PI_2_F, 0.0f, 0.0f);
+		vector_q = q.conjugate(vector);
+		Vector<3> vector_true = {1.00f, -1.00f, 1.00f};
+
+		for (unsigned i = 0; i < 3; i++) {
+			if (fabsf(vector_true(i) - vector_q(i)) > tol) {
+				PX4_WARN("Quaternion method 'rotate' outside tolerance");
+				rc = 1;
+			}
+		}
+
+		q.from_euler(0.3f, 0.2f, 0.1f);
+		vector_q = q.conjugate(vector);
+		vector_true = {1.1566, 0.7792, 1.0273};
+
+		for (unsigned i = 0; i < 3; i++) {
+			if (fabsf(vector_true(i) - vector_q(i)) > tol) {
+				PX4_WARN("Quaternion method 'rotate' outside tolerance");
+				rc = 1;
+			}
+		}
+
+		q.from_euler(-1.5f, -0.2f, 0.5f);
+		vector_q = q.conjugate(vector);
+		vector_true = {0.5095, 1.4956, -0.7096};
+
+		for (unsigned i = 0; i < 3; i++) {
+			if (fabsf(vector_true(i) - vector_q(i)) > tol) {
+				PX4_WARN("Quaternion method 'rotate' outside tolerance");
+				rc = 1;
+			}
+		}
+
+		q.from_euler(M_PI_2_F, -M_PI_2_F, -M_PI_F / 3.0f);
+		vector_q = q.conjugate(vector);
+		vector_true = { -1.3660, 0.3660, 1.0000};
+
+		for (unsigned i = 0; i < 3; i++) {
+			if (fabsf(vector_true(i) - vector_q(i)) > tol) {
+				PX4_WARN("Quaternion method 'rotate' outside tolerance");
+				rc = 1;
+			}
+		}
+	}
 	return rc;
 }

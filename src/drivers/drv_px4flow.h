@@ -44,12 +44,7 @@
 #include "drv_sensor.h"
 #include "drv_orb_dev.h"
 
-#define PX4FLOW_DEVICE_PATH	"/dev/px4flow"
-
-/*
- * ObjDev tag for px4flow data.
- */
-ORB_DECLARE(optical_flow);
+#define PX4FLOW0_DEVICE_PATH	"/dev/px4flow0"
 
 /*
  * ioctl() definitions

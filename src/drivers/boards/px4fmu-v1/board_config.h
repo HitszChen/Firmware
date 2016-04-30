@@ -43,7 +43,7 @@
  * Included Files
  ****************************************************************************************************/
 
-#include <nuttx/config.h>
+#include <px4_config.h>
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
@@ -52,7 +52,7 @@ __BEGIN_DECLS
 /* these headers are not C++ safe */
 #include <stm32.h>
 #include <arch/board/board.h>
- 
+
 /****************************************************************************************************
  * Definitions
  ****************************************************************************************************/
@@ -114,12 +114,23 @@ __BEGIN_DECLS
  * Note that these are unshifted addresses.
  */
 #define PX4_I2C_OBDEV_HMC5883	0x1e
-#define PX4_I2C_OBDEV_MS5611	0x76
 #define PX4_I2C_OBDEV_EEPROM	NOTDEFINED
 #define PX4_I2C_OBDEV_LED	0x55
 
 #define PX4_I2C_OBDEV_PX4IO_BL	0x18
 #define PX4_I2C_OBDEV_PX4IO	0x1a
+
+/*
+ * ADC channels
+ *
+ * These are the channel numbers of the ADCs of the microcontroller that can be used by the Px4 Firmware in the adc driver
+ */
+#define ADC_CHANNELS (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13)
+
+// ADC defines to be used in sensors.cpp to read from a particular channel
+#define ADC_BATTERY_VOLTAGE_CHANNEL	10
+#define ADC_BATTERY_CURRENT_CHANNEL	((uint8_t)(-1))
+#define ADC_AIRSPEED_VOLTAGE_CHANNEL	11
 
 /* User GPIOs
  *
@@ -171,6 +182,13 @@ __BEGIN_DECLS
 #define GPIO_TIM2_CH2OUT	GPIO_TIM2_CH2OUT_1
 #define GPIO_TIM2_CH3OUT	GPIO_TIM2_CH3OUT_1
 #define GPIO_TIM2_CH4OUT	GPIO_TIM2_CH4OUT_1
+#define DIRECT_PWM_OUTPUT_CHANNELS	4
+
+#define GPIO_TIM2_CH1IN		GPIO_TIM2_CH1IN_1
+#define GPIO_TIM2_CH2IN		GPIO_TIM2_CH2IN_1
+#define GPIO_TIM2_CH3IN		GPIO_TIM2_CH3IN_1
+#define GPIO_TIM2_CH4IN		GPIO_TIM2_CH4IN_1
+#define DIRECT_INPUT_TIMER_CHANNELS  4
 
 /* USB OTG FS
  *
